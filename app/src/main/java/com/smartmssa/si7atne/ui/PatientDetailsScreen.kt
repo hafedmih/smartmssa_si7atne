@@ -21,7 +21,8 @@ import com.smartmssa.si7atne.data.Treatment
 fun PatientDetailsScreen(
     onBackClicked: () -> Unit,
     viewModel: MainViewModel,
-    onWriteNfcClicked: (String) -> Unit
+    onLogoutClicked: () -> Unit
+
 ) {
     val patientState by viewModel.patientState.collectAsState()
 
@@ -35,32 +36,14 @@ fun PatientDetailsScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Patient Medical Record") },
-                navigationIcon = {
-                    IconButton(onClick = onBackClicked) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                }
+            MainAppBar(
+                title = "Patient Medical Record",
+                showBackButton = true, // This screen needs a back button
+                onBackClicked = onBackClicked,
+                onLogoutClicked = onLogoutClicked
             )
         },
-        bottomBar = {
-            if (patientState is PatientState.Success) {
-                BottomAppBar {
-                    Button(
-                        onClick = {
-                            val patient = (patientState as PatientState.Success).patient
-                            onWriteNfcClicked(patient.nni)
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp)
-                    ) {
-                        Text("Write NNI to NFC Card")
-                    }
-                }
-            }
-        }
+
     ) { innerPadding ->
         Box(
             modifier = Modifier

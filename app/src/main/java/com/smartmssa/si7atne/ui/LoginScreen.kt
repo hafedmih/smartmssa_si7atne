@@ -1,14 +1,18 @@
 package com.smartmssa.si7atne.ui
 
-import androidx.compose.animation.AnimatedVisibility
+import android.content.Intent
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.smartmssa.si7atne.WriteNfcActivity
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoginScreen(
     viewModel: MainViewModel,
@@ -17,53 +21,82 @@ fun LoginScreen(
     var username by remember { mutableStateOf("test-api@smartms.com") }
     var password by remember { mutableStateOf("test1") }
     val loginState by viewModel.loginState.collectAsState()
+    val context = LocalContext.current
+    var menuExpanded by remember { mutableStateOf(false) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        // --- KEY CHANGE ---
-        // This card will only be visible when a code has been scanned pre-login.
-
-
-        OutlinedTextField(
-            value = username,
-            onValueChange = { username = it },
-            label = { Text("Username") },
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        OutlinedTextField(
-            value = password,
-            onValueChange = { password = it },
-            label = { Text("Password") },
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        Button(
-            onClick = { viewModel.login(username, password) },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Login")
-        }
-
-        when (val state = loginState) {
-            is LoginState.Loading -> CircularProgressIndicator(modifier = Modifier.padding(top = 16.dp))
-            is LoginState.Success -> {
-                // LaunchedEffect is crucial here to prevent multiple calls
-                LaunchedEffect(state) {
-                    onLoginSuccess(state.token)
+    // --- KEY CHANGE: Wrap the screen in a Scaffold to hold the TopAppBar ---
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Login") },
+                actions = {
+                    // This creates the "..." menu icon
+                    IconButton(onClick = { menuExpanded = true }) {
+                        Icon(imageVector = Icons.Default.MoreVert, contentDescription = "Menu")
+                    }
+                    // This is the dropdown menu that appears when the icon is clicked
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Write to NFC Card") },
+                            onClick = {
+                                menuExpanded = false // Close the menu
+                                // Launch the new WriteNfcActivity
+                                context.startActivity(Intent(context, WriteNfcActivity::class.java))
+                            }
+                        )
+                    }
                 }
-            }
-            is LoginState.Error -> Text(
-                state.message,
-                color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(top = 16.dp)
             )
-            else -> {}
+        }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding) // Apply padding from the Scaffold
+                .padding(16.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            OutlinedTextField(
+                value = username,
+                onValueChange = { username = it },
+                label = { Text("Username") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = password,
+                onValueChange = { password = it },
+                label = { Text("Password") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(
+                onClick = { viewModel.login(username, password) },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Login")
+            }
+
+            // The TextButton is now removed from here.
+
+            when (val state = loginState) {
+                is LoginState.Loading -> CircularProgressIndicator(modifier = Modifier.padding(top = 16.dp))
+                is LoginState.Success -> {
+                    LaunchedEffect(state) {
+                        onLoginSuccess(state.token)
+                    }
+                }
+                is LoginState.Error -> Text(
+                    state.message,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(top = 16.dp)
+                )
+                else -> {}
+            }
         }
     }
 }

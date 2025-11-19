@@ -2,10 +2,8 @@ package com.smartmssa.si7atne
 
 import android.content.Intent
 import android.nfc.NdefMessage
-import android.nfc.NdefRecord.createTextRecord
 import android.nfc.NfcAdapter
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -18,11 +16,22 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavController
+import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.navigation
 import androidx.navigation.compose.rememberNavController
 import com.smartmssa.si7atne.ui.*
 import com.smartmssa.si7atne.ui.theme.Si7atneTheme
+
+// Define clear, reusable routes for our graphs and screens
+object AppRoutes {
+    const val LOGIN_GRAPH = "login_graph"
+    const val MAIN_GRAPH = "main_graph"
+    const val LOGIN_SCREEN = "login"
+    const val PATIENT_CODE_SCREEN = "patient_code"
+    const val PATIENT_DETAILS_SCREEN = "patient_details"
+}
 
 class MainActivity : ComponentActivity() {
 
@@ -35,43 +44,36 @@ class MainActivity : ComponentActivity() {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     val navController = rememberNavController()
 
-                    // If token exists, skip login screen
-                    val startDestination = if (SessionManager.authToken == null) "login" else "patient_code"
+                    // The logout action is defined once here
+                    val onLogout: () -> Unit = {
+                        SessionManager.authToken = null
+                        // Navigate to the login graph and clear the entire app history
+                        navController.navigate(AppRoutes.LOGIN_GRAPH) {
+                            popUpTo(0) { // Pops the entire back stack
+                                inclusive = true
+                            }
+                        }
+                    }
 
+                    // This observer handles automatic navigation when a patient is found
                     ObservePatientStateForNavigation(viewModel, navController)
+
+                    // Determine the starting point based on whether the user is already logged in
+                    val startDestination = if (SessionManager.authToken == null) AppRoutes.LOGIN_GRAPH else AppRoutes.MAIN_GRAPH
 
                     NavHost(
                         navController = navController,
                         startDestination = startDestination
                     ) {
-                        composable("login") {
-                            LoginScreen(
-                                viewModel = viewModel,
-                                onLoginSuccess = { token ->
-                                    SessionManager.authToken = token
-                                    navController.navigate("patient_code") {
-                                        popUpTo("login") { inclusive = true }
-                                    }
-                                }
-                            )
-                        }
-                        composable("patient_code") {
-                            PatientCodeScreen(viewModel)
-                        }
-                        composable("patient_details") {
-                            PatientDetailsScreen(
-                                onBackClicked = { navController.popBackStack() },
-                                viewModel = viewModel,
-                                onWriteNfcClicked = { nni ->
-                                    enableNfcWriteMode(nni)
-                                }
-                            )
-                        }
+                        // Graph 1: The "unauthenticated" part of the app
+                        loginGraph(navController, viewModel)
+
+                        // Graph 2: The "authenticated" part of the app
+                        mainGraph(navController, viewModel, onLogout)
                     }
                 }
             }
         }
-
         intent?.let { handleNfcIntent(it) }
     }
 
@@ -79,66 +81,12 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         handleNfcIntent(intent)
     }
-    private var nfcWriteMessage: String? = null
-    private var writeModeEnabled = false
-
-    private fun enableNfcWriteMode(message: String) {
-        nfcWriteMessage = message
-        writeModeEnabled = true
-       // Toast.makeText(this, "Tap an NFC card to write NNI", Toast.LENGTH_LONG).show()
-    }
 
     private fun handleNfcIntent(intent: Intent) {
-        val action = intent.action
-
-        if (writeModeEnabled && nfcWriteMessage != null) {
-            writeTextToNfc(intent, nfcWriteMessage!!)
-            writeModeEnabled = false
-            nfcWriteMessage = null
-            return
-        }
-
         val patientCode = parsePatientCodeFromIntent(intent) ?: return
         viewModel.getPatientDetails(patientCode)
     }
-    private fun writeTextToNfc(intent: Intent, text: String) {
-        try {
-            val tag = intent.getParcelableExtra<NdefMessage>(NfcAdapter.EXTRA_TAG)
-            val ndefMessage = createTextRecord(text)
-            val nfcTag = intent.getParcelableExtra<android.nfc.Tag>(NfcAdapter.EXTRA_TAG)
 
-            val ndef = android.nfc.tech.Ndef.get(nfcTag)
-            if (ndef != null) {
-                ndef.connect()
-                ndef.writeNdefMessage(ndefMessage)
-                ndef.close()
-                Toast.makeText(this, "NNI saved to NFC successfully!", Toast.LENGTH_LONG).show()
-            } else {
-                Toast.makeText(this, "Tag is not NDEF compatible", Toast.LENGTH_LONG).show()
-            }
-        } catch (e: Exception) {
-            Toast.makeText(this, "Write error: ${e.message}", Toast.LENGTH_LONG).show()
-        }
-    }
-    private fun createTextRecord(text: String): NdefMessage {
-        val lang = "en"
-        val langBytes = lang.toByteArray(Charsets.US_ASCII)
-        val textBytes = text.toByteArray(Charsets.UTF_8)
-        val payload = ByteArray(1 + langBytes.size + textBytes.size)
-
-        payload[0] = langBytes.size.toByte()
-        System.arraycopy(langBytes, 0, payload, 1, langBytes.size)
-        System.arraycopy(textBytes, 0, payload, 1 + langBytes.size, textBytes.size)
-
-        val record = android.nfc.NdefRecord(
-            android.nfc.NdefRecord.TNF_WELL_KNOWN,
-            android.nfc.NdefRecord.RTD_TEXT,
-            ByteArray(0),
-            payload
-        )
-
-        return NdefMessage(arrayOf(record))
-    }
     private fun parsePatientCodeFromIntent(intent: Intent): String? {
         if (NfcAdapter.ACTION_NDEF_DISCOVERED == intent.action) {
             val rawMessages = intent.getParcelableArrayExtra(NfcAdapter.EXTRA_NDEF_MESSAGES)
@@ -154,13 +102,67 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/**
+ * Defines the navigation graph for the unauthenticated user flow.
+ * Its only screen is the login screen.
+ */
+private fun NavGraphBuilder.loginGraph(navController: NavController, viewModel: MainViewModel) {
+    navigation(
+        startDestination = AppRoutes.LOGIN_SCREEN,
+        route = AppRoutes.LOGIN_GRAPH
+    ) {
+        composable(AppRoutes.LOGIN_SCREEN) {
+            LoginScreen(
+                viewModel = viewModel,
+                onLoginSuccess = { token ->
+                    SessionManager.authToken = token
+                    // Navigate to the main app graph and destroy the login graph from history
+                    navController.navigate(AppRoutes.MAIN_GRAPH) {
+                        popUpTo(AppRoutes.LOGIN_GRAPH) {
+                            inclusive = true
+                        }
+                    }
+                }
+            )
+        }
+    }
+}
+
+/**
+ * Defines the navigation graph for the authenticated user flow.
+ */
+private fun NavGraphBuilder.mainGraph(navController: NavController, viewModel: MainViewModel, onLogout: () -> Unit) {
+    navigation(
+        startDestination = AppRoutes.PATIENT_CODE_SCREEN,
+        route = AppRoutes.MAIN_GRAPH
+    ) {
+        composable(AppRoutes.PATIENT_CODE_SCREEN) {
+            PatientCodeScreen(
+                viewModel = viewModel,
+                onLogoutClicked = onLogout
+            )
+        }
+        composable(AppRoutes.PATIENT_DETAILS_SCREEN) {
+            PatientDetailsScreen(
+                onBackClicked = { navController.popBackStack() },
+                viewModel = viewModel,
+                onLogoutClicked = onLogout
+            )
+        }
+    }
+}
+
+
+/**
+ * A dedicated observer that listens to the patientState and triggers navigation to the details screen.
+ */
 @Composable
 private fun ObservePatientStateForNavigation(viewModel: MainViewModel, navController: NavController) {
     val patientState by viewModel.patientState.collectAsState()
     LaunchedEffect(patientState) {
         if (patientState is PatientState.Success) {
-            if (navController.currentDestination?.route != "patient_details") {
-                navController.navigate("patient_details")
+            if (navController.currentDestination?.route != AppRoutes.PATIENT_DETAILS_SCREEN) {
+                navController.navigate(AppRoutes.PATIENT_DETAILS_SCREEN)
             }
         }
     }

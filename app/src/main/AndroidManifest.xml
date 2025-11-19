@@ -33,6 +33,19 @@
                 <category android:name="android.intent.category.DEFAULT"/>
                 <data android:mimeType="text/plain" />
             </intent-filter>
+
+        </activity>
+        <activity
+            android:name=".WriteNfcActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.Si7atne">
+            <!-- This intent filter allows the activity to be launched when a tag is discovered
+                 while the app is in the foreground (via foreground dispatch). -->
+            <intent-filter>
+                <action android:name="android.nfc.action.NDEF_DISCOVERED" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
         </activity>
     </application>
 
