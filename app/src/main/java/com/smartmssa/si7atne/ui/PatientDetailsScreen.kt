@@ -20,7 +20,8 @@ import com.smartmssa.si7atne.data.Treatment
 @Composable
 fun PatientDetailsScreen(
     onBackClicked: () -> Unit,
-    viewModel: MainViewModel
+    viewModel: MainViewModel,
+    onWriteNfcClicked: (String) -> Unit
 ) {
     val patientState by viewModel.patientState.collectAsState()
 
@@ -42,6 +43,23 @@ fun PatientDetailsScreen(
                     }
                 }
             )
+        },
+        bottomBar = {
+            if (patientState is PatientState.Success) {
+                BottomAppBar {
+                    Button(
+                        onClick = {
+                            val patient = (patientState as PatientState.Success).patient
+                            onWriteNfcClicked(patient.nni)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
+                    ) {
+                        Text("Write NNI to NFC Card")
+                    }
+                }
+            }
         }
     ) { innerPadding ->
         Box(

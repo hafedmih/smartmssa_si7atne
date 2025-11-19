@@ -2,6 +2,7 @@ package com.smartmssa.si7atne
 
 import android.content.Intent
 import android.nfc.NdefMessage
+import android.nfc.NdefRecord.createTextRecord
 import android.nfc.NfcAdapter
 import android.os.Bundle
 import android.widget.Toast
@@ -31,41 +32,46 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             Si7atneTheme(dynamicColor = false) {
-                Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                Surface(modifier = Modifier.fillMaxSize()) {
                     val navController = rememberNavController()
+
+                    // If token exists, skip login screen
+                    val startDestination = if (SessionManager.authToken == null) "login" else "patient_code"
 
                     ObservePatientStateForNavigation(viewModel, navController)
 
-                    NavHost(navController = navController, startDestination = "login") {
+                    NavHost(
+                        navController = navController,
+                        startDestination = startDestination
+                    ) {
                         composable("login") {
                             LoginScreen(
                                 viewModel = viewModel,
                                 onLoginSuccess = { token ->
                                     SessionManager.authToken = token
-                                    // --- CRUCIAL CHANGE ---
-                                    // Navigate to the next screen AND remove the login screen
-                                    // from the back stack so the user can't go back to it.
                                     navController.navigate("patient_code") {
-                                        popUpTo("login") {
-                                            inclusive = true
-                                        }
+                                        popUpTo("login") { inclusive = true }
                                     }
                                 }
                             )
                         }
                         composable("patient_code") {
-                            PatientCodeScreen(viewModel = viewModel)
+                            PatientCodeScreen(viewModel)
                         }
                         composable("patient_details") {
                             PatientDetailsScreen(
                                 onBackClicked = { navController.popBackStack() },
-                                viewModel = viewModel
+                                viewModel = viewModel,
+                                onWriteNfcClicked = { nni ->
+                                    enableNfcWriteMode(nni)
+                                }
                             )
                         }
                     }
                 }
             }
         }
+
         intent?.let { handleNfcIntent(it) }
     }
 
@@ -73,12 +79,66 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         handleNfcIntent(intent)
     }
+    private var nfcWriteMessage: String? = null
+    private var writeModeEnabled = false
+
+    private fun enableNfcWriteMode(message: String) {
+        nfcWriteMessage = message
+        writeModeEnabled = true
+       // Toast.makeText(this, "Tap an NFC card to write NNI", Toast.LENGTH_LONG).show()
+    }
 
     private fun handleNfcIntent(intent: Intent) {
+        val action = intent.action
+
+        if (writeModeEnabled && nfcWriteMessage != null) {
+            writeTextToNfc(intent, nfcWriteMessage!!)
+            writeModeEnabled = false
+            nfcWriteMessage = null
+            return
+        }
+
         val patientCode = parsePatientCodeFromIntent(intent) ?: return
         viewModel.getPatientDetails(patientCode)
     }
+    private fun writeTextToNfc(intent: Intent, text: String) {
+        try {
+            val tag = intent.getParcelableExtra<NdefMessage>(NfcAdapter.EXTRA_TAG)
+            val ndefMessage = createTextRecord(text)
+            val nfcTag = intent.getParcelableExtra<android.nfc.Tag>(NfcAdapter.EXTRA_TAG)
 
+            val ndef = android.nfc.tech.Ndef.get(nfcTag)
+            if (ndef != null) {
+                ndef.connect()
+                ndef.writeNdefMessage(ndefMessage)
+                ndef.close()
+                Toast.makeText(this, "NNI saved to NFC successfully!", Toast.LENGTH_LONG).show()
+            } else {
+                Toast.makeText(this, "Tag is not NDEF compatible", Toast.LENGTH_LONG).show()
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "Write error: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+    private fun createTextRecord(text: String): NdefMessage {
+        val lang = "en"
+        val langBytes = lang.toByteArray(Charsets.US_ASCII)
+        val textBytes = text.toByteArray(Charsets.UTF_8)
+        val payload = ByteArray(1 + langBytes.size + textBytes.size)
+
+        payload[0] = langBytes.size.toByte()
+        System.arraycopy(langBytes, 0, payload, 1, langBytes.size)
+        System.arraycopy(textBytes, 0, payload, 1 + langBytes.size, textBytes.size)
+
+        val record = android.nfc.NdefRecord(
+            android.nfc.NdefRecord.TNF_WELL_KNOWN,
+            android.nfc.NdefRecord.RTD_TEXT,
+            ByteArray(0),
+            payload
+        )
+
+        return NdefMessage(arrayOf(record))
+    }
     private fun parsePatientCodeFromIntent(intent: Intent): String? {
         if (NfcAdapter.ACTION_NDEF_DISCOVERED == intent.action) {
             val rawMessages = intent.getParcelableArrayExtra(NfcAdapter.EXTRA_NDEF_MESSAGES)
