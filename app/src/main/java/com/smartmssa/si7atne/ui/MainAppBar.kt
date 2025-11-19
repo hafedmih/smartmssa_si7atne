@@ -47,6 +47,16 @@ fun MainAppBar(
                     )
                 }
             }
-        }
+        },
+                colors = TopAppBarDefaults.topAppBarColors(
+                // Set the background color to the primary color from your theme
+                containerColor = MaterialTheme.colorScheme.primary,
+        // Set the title text color to be readable on the primary color
+        titleContentColor = MaterialTheme.colorScheme.onPrimary,
+        // Set the navigation icon (back button) color
+        navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,
+        // Set the action icons (menu icon) color
+        actionIconContentColor = MaterialTheme.colorScheme.onPrimary
+    )
     )
 }

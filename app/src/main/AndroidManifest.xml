@@ -20,6 +20,7 @@
             android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name"
+            android:screenOrientation="portrait"
 
             android:launchMode="singleTop"
             android:theme="@style/Theme.Si7atne">
@@ -39,6 +40,7 @@
             android:name=".WriteNfcActivity"
             android:exported="true"
             android:launchMode="singleTop"
+            android:screenOrientation="portrait"
             android:theme="@style/Theme.Si7atne">
             <!-- This intent filter allows the activity to be launched when a tag is discovered
                  while the app is in the foreground (via foreground dispatch). -->

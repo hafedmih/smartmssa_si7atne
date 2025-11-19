@@ -18,8 +18,8 @@ fun LoginScreen(
     viewModel: MainViewModel,
     onLoginSuccess: (String) -> Unit
 ) {
-    var username by remember { mutableStateOf("test-api@smartms.com") }
-    var password by remember { mutableStateOf("test1") }
+    var username by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
     val loginState by viewModel.loginState.collectAsState()
     val context = LocalContext.current
     var menuExpanded by remember { mutableStateOf(false) }
@@ -48,7 +48,17 @@ fun LoginScreen(
                             }
                         )
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    // Set the background color to the primary color from your theme
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    // Set the title text color to be readable on the primary color
+                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                    // Set the navigation icon (back button) color
+                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,
+                    // Set the action icons (menu icon) color
+                    actionIconContentColor = MaterialTheme.colorScheme.onPrimary
+                )
             )
         }
     ) { innerPadding ->
